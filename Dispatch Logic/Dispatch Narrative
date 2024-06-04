@@ -1,0 +1,17 @@
+Dispatch Narrative = 
+
+VAR _Metric = fctDispatch[Dispatch On Time]
+VAR _TargetDispatchDate = fctDispatch[//Target Dispatch Date]
+VAR _Cutoff = LOOKUPVALUE(dimCutoff[Time],dimCutoff[Courier],fctDispatch[Forwarding Agent])
+VAR _DispatchDate = DATEVALUE(fctDispatch[Act.goods issue date])
+VAR _DispatchTime = TIMEVALUE(fctDispatch[Actual goods.issue time])
+VAR _Missed_Time = NETWORKDAYS(_TargetDispatchDate,_DispatchDate) -1
+VAR _Days = IF(_Missed_Time = 1, " Day", " Days")
+
+RETURN
+SWITCH(
+    TRUE(),
+    _Metric = "HIT", "Dispatch On Time",
+    _Metric = "MISS" && _TargetDispatchDate = _DispatchDate && _Cutoff < _DispatchTime, "Dispatched On Target date but Missed Cutoff",
+    _Metric = "MISS" && WEEKDAY(_TargetDispatchDate,2) = 5 && WEEKDAY(_DispatchDate,2) > 5, "Weekend Dispatch",
+    _Metric = "MISS" && _TargetDispatchDate < _DispatchDate, "Dispatched Late: "&FORMAT(_Missed_Time,"#")&_Days)
