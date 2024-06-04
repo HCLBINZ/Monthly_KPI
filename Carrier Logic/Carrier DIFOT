@@ -1,0 +1,21 @@
+DIFOT - Carrier = // Measures from Goods Available
+VAR Transit_Time = fctOutbound_12Months[Route - Transit duration in (Key)]
+VAR Courier_Cutoff = LOOKUPVALUE(dimCutoff[Time],dimCutoff[Courier],fctOutbound_12Months[Forwarding Agent])
+VAR Collection_Time = IF(fctOutbound_12Months[Shipment Start Date] = BLANK(), fctOutbound_12Months[Actual goods.issue time],fctOutbound_12Months[Shipment Start Time])
+VAR Collection_Date = IF(fctOutbound_12Months[Shipment Start Date] = BLANK(), fctOutbound_12Months[Shipment Pick Completion] + 1,fctOutbound_12Months[Shipment Start Date])
+VAR Requested_Delivery = DATEVALUE(fctOutbound_12Months[Requested Delivery Date])
+VAR POD = fctOutbound_12Months[Shipment End Date]
+
+
+
+//
+VAR Delivery_Time = NETWORKDAYS(Collection_Date,fctOutbound_12Months[Shipment End Date],1,dimHolidays) -1
+VAR DIFOT_Carrier = 
+SWITCH(
+    TRUE(),
+    Delivery_Time <= Transit_Time, "HIT",
+    POD <= Requested_Delivery && Requested_Delivery <> BLANK(), "HIT",
+    "MISS")
+
+RETURN
+DIFOT_Carrier
