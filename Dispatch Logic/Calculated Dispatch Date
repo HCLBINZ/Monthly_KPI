@@ -1,0 +1,89 @@
+//Dispatch = 
+// Wholesale Dispatch = 
+VAR Cutoff = 
+    IF(TIMEVALUE(fctDispatch[Delivery Creation Time]) <= TIME(12,07,00),"Before Cutoff","After Cutoff")
+VAR ColdChain = 
+    IF(RIGHT(fctDispatch[Shipping point - Key],1) = "1",TRUE(),FALSE())
+VAR Order_Day = 
+    WEEKDAY(fctDispatch[Delivery Creation Date],2)
+VAR Order_Date = 
+    fctDispatch[Delivery Creation Date]
+VAR _RequestedDelivery_Date = 
+    fctDispatch[Requested Delivery Date]
+VAR _Transit_Time = 
+    fctDispatch[Route - Transit duration in (Key)]
+VAR Island = 
+    fctDispatch[Island]
+VAR Wholesale_Calendar_Order_Day =
+    LOOKUPVALUE(dimWholesaleCalendar[Order Day#],dimWholesaleCalendar[REF_ShipTo_ColdChain],fctDispatch[REF_ShipTo_ColdChain])
+VAR Wholesale_Calendar_Pick_Day = 
+    LOOKUPVALUE(dimWholesaleCalendar[Despatch Day#],dimWholesaleCalendar[REF_ShipTo_ColdChain],fctDispatch[REF_ShipTo_ColdChain])
+VAR Wholesaler = IF(ISBLANK(Wholesale_Calendar_Order_Day),FALSE(),TRUE())
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Standard Order //Using Cutoff to determine standard dispatch date
+VAR _StandardOrderDate_Cutoff = 
+    SWITCH(
+        TRUE(),
+            Cutoff = "Before Cutoff", 
+            IF(
+                LOOKUPVALUE(dimDate[Business Day],dimDate[Date], Order_Date) = BLANK(),
+                    MINX(
+                        FILTER(
+                            dimDate,
+                            dimDate[Business Day] <> BLANK() &&
+                            dimDate[Business Day] > Order_Date),
+                            dimDate[Business Day]), Order_Date),
+            Cutoff = "After Cutoff",
+            IF(
+                LOOKUPVALUE(dimDate[Business Day],dimDate[Date], Order_Date + 1) = BLANK(),
+                    MINX(
+                        FILTER(
+                            dimDate,
+                            dimDate[Business Day] <> BLANK() &&
+                            dimDate[Business Day] > Order_Date + 1),
+                            dimDate[Business Day]),
+                            Order_Date + 1))
+VAR _StandardOrderDay_Cutoff = 
+    WEEKDAY(_StandardOrderDate_Cutoff,2)
+
+//WHOLESALE
+VAR DifferenceBetweenOrderAndWSOrderday = 
+    (Wholesale_Calendar_Order_Day - _StandardOrderDay_Cutoff)+_StandardOrderDate_Cutoff
+
+VAR Wholesale_Calendar_Confirmed_Order_Date = 
+    SWITCH(
+        TRUE(),
+        _StandardOrderDay_Cutoff <= Wholesale_Calendar_Order_Day, DifferenceBetweenOrderAndWSOrderday,
+        _StandardOrderDay_Cutoff > Wholesale_Calendar_Order_Day, DifferenceBetweenOrderAndWSOrderday + 7)
+
+VAR Wholesale_Calendar_Confirmed_Pick_Date = 
+    Wholesale_Calendar_Confirmed_Order_Date + (Wholesale_Calendar_Pick_Day-Wholesale_Calendar_Order_Day)
+
+    
+//REQUESTED DELIVERY DATES//
+VAR _ColdChain_RequestedDeliveryDate = //Converts Requested Business Date to next Business Date
+    MINX(
+        FILTER(
+                dimDate,
+                dimDate[Business Day] <> BLANK() &&
+                dimDate[Business Day] > _RequestedDelivery_Date - _Transit_Time && 
+                dimDate[Business Day] >= _StandardOrderDate_Cutoff &&
+                dimDate[Days in Sequence] >= _Transit_Time),
+                dimDate[Business Day])
+                
+VAR _Standard_RequestedDeliveryDate = 
+    MINX(
+        FILTER(
+                dimDate,
+                dimDate[Business Day] <> BLANK() &&
+                dimDate[Business Day] > _RequestedDelivery_Date - _Transit_Time &&
+                dimDate[Business Day] >= _StandardOrderDate_Cutoff),
+                dimDate[Business Day])
+
+RETURN
+SWITCH(
+    TRUE(),
+    Wholesaler = TRUE(), Wholesale_Calendar_Confirmed_Pick_Date, 
+    ColdChain = TRUE(), _ColdChain_RequestedDeliveryDate,
+    _Standard_RequestedDeliveryDate)
