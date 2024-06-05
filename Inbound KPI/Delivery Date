@@ -1,0 +1,13 @@
+MaxDateForDeliveryNumber = 
+VAR _DeliveryDate = 
+CALCULATE(
+    MAX(fctInbound[Conf. Delivery Date]),
+    ALLEXCEPT(fctInbound, fctInbound[Delivery No])
+)
+RETURN
+    IF(
+        _DeliveryDate > fctInbound[GR Entry Date],
+        fctInbound[GR Entry Date],
+        _DeliveryDate)
+
+//Take the latest inbound delivery date - sometimes the Inbound Delivery date is the first In Plant, which creates a discrepancy with the dates
