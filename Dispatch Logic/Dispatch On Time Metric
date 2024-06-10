@@ -1,0 +1,17 @@
+//Dispatch On Time Metric = 
+VAR _GoodsIssue = fctDispatch[Act.goods issue date]
+VAR _GoodsIssueTime = fctDispatch[Actual goods.issue time]
+VAR _CutoffTime = LOOKUPVALUE(dimCutoff[Time],dimCutoff[Courier],fctDispatch[Forwarding Agent])
+VAR _CalculatedDispatchDate = fctDispatch[//Target Dispatch Date]
+
+VAR _Metric = 
+SWITCH(
+    TRUE(),
+    _GoodsIssue < _CalculatedDispatchDate, "HIT",
+    _GoodsIssue = _CalculatedDispatchDate && _GoodsIssueTime <= _CutoffTime, "HIT",
+    _GoodsIssue = _CalculatedDispatchDate && fctDispatch[Shipment Start Date] = _GoodsIssue, "HIT",
+    fctDispatch[//DIFOT Metric] = "HIT", "HIT",
+    "MISS")
+
+RETURN
+_Metric
