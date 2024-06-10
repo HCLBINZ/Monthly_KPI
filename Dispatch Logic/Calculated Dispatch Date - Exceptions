@@ -1,0 +1,86 @@
+//Calculated Dispatch Date - Exceptions = 
+VAR _Exception = 
+SWITCH(
+    TRUE(),
+    fctDispatch[Principal - Key] = "99609", "TWO",
+    fctDispatch[Principal - Key] = "99646", "TWO",
+    fctDispatch[Principal - Key] = "99843", "TWO",
+    fctDispatch[Principal - Key] = "99987", "Pharmabroker",
+    BLANK())
+/////////////////////////////
+VAR Order_Date = 
+    fctDispatch[Delivery Creation Date]
+/////////////////////////////
+VAR _NextDayDispatch = //Next Business Day
+MINX(
+        FILTER(
+                dimDate,
+                    dimDate[Business Day] <> BLANK() &&
+                    dimDate[Business Day] > Order_Date),
+                    dimDate[Business Day])
+VAR Cutoff = 
+    IF(TIMEVALUE(fctDispatch[Delivery Creation Time]) <= TIME(12,07,00),"Before Cutoff","After Cutoff")
+//Standard Order //Using Cutoff to determine standard dispatch date
+VAR _StandardOrderDate_Cutoff = 
+    SWITCH(
+        TRUE(),
+            Cutoff = "Before Cutoff", 
+            IF(
+                LOOKUPVALUE(dimDate[Business Day],dimDate[Date], Order_Date) = BLANK(),
+                    MINX(
+                        FILTER(
+                            dimDate,
+                            dimDate[Business Day] <> BLANK() &&
+                            dimDate[Business Day] > Order_Date),
+                            dimDate[Business Day]), Order_Date),
+            Cutoff = "After Cutoff",
+            IF(
+                LOOKUPVALUE(dimDate[Business Day],dimDate[Date], Order_Date + 1) = BLANK(),
+                    MINX(
+                        FILTER(
+                            dimDate,
+                            dimDate[Business Day] <> BLANK() &&
+                            dimDate[Business Day] > Order_Date + 1),
+                            dimDate[Business Day]),
+                            Order_Date + 1))
+/////////////////////////////
+VAR _FreightType = LOOKUPVALUE(dimCutoff[Freight Type],dimCutoff[Courier],fctDispatch[Forwarding Agent])
+
+VAR _DispatchDuration = 
+SWITCH(
+    TRUE(),
+    fctDispatch[Island] = "North Island" && _FreightType = "Parcel", 1,
+    fctDispatch[Island] = "South Island" && _FreightType = "Parcel", 1,
+    fctDispatch[Island] = "North Island" && _FreightType = "Bulk", 2,
+    fctDispatch[Island] = "South Island" && _FreightType = "Bulk", 2,
+    2)
+
+VAR _RawDispatch =
+    MINX(
+        FILTER(
+            dimDate,
+            dimDate[Business Day] <> BLANK() && 
+            dimDate[Business Day] >= _StandardOrderDate_Cutoff + _DispatchDuration),
+            dimDate[Business Day])
+
+VAR _Validation_Of_DispatchDuration_Days = 
+            NETWORKDAYS(_StandardOrderDate_Cutoff, _RawDispatch, 1, dimHolidays) - 1
+VAR _Correct_Dispatch = 
+IF(
+    _Validation_Of_DispatchDuration_Days < _DispatchDuration, FALSE(), TRUE())
+
+VAR _Dispatch = 
+IF(_Correct_Dispatch = FALSE(), _RawDispatch + _Validation_Of_DispatchDuration_Days,_RawDispatch)
+VAR _TWODispatchDate = 
+    MINX(
+        FILTER(
+            dimDate,
+            dimDate[Business Day] <> BLANK() && 
+            dimDate[Business Day] >= _Dispatch),
+            dimDate[Business Day])
+RETURN
+SWITCH(
+    TRUE(),
+    _Exception = "TWO", _TWODispatchDate,
+    _Exception = "Pharmabroker", _NextDayDispatch,
+    BLANK())
